@@ -10,6 +10,11 @@ from agents import (
     stream_plan_execute,
     stream_react,
 )
+from demo_data import (
+    DEMO_DATA,
+    simulate_stream_plan_execute,
+    simulate_stream_react,
+)
 from llm import make_llm
 from tools import TOOL_REGISTRY
 
@@ -142,16 +147,22 @@ st.markdown(
 # ------------------------------------------------------------------ Sidebar (Technical Configuration)
 with st.sidebar:
     st.markdown("#### Engine Configuration")
-    api_key_status = "Active (.env)" if config.OPENROUTER_API_KEY else "Not detected"
+    if config.OPENROUTER_API_KEY:
+        api_key_status = "Active (Connected)"
+        key_caption = "Server credentials loaded. Live execution active without requiring visitor input."
+    else:
+        api_key_status = "Showcase Mode (Zero-Config)"
+        key_caption = "No server key detected. Preset benchmarks run in instant showcase mode."
     st.caption(f"OpenRouter Credentials: **{api_key_status}**")
 
     api_key_override = st.text_input(
-        "OpenRouter Key Override",
+        "Custom Key Override (Optional)",
         type="password",
         value="",
         placeholder="sk-or-v1-...",
-        help="Leave blank to use OPENROUTER_API_KEY from .env",
+        help="Optional. Leave blank to automatically use server credentials.",
     )
+    st.caption(key_caption)
 
     model_name = st.text_input(
         "OpenRouter Model Identifier",
@@ -281,13 +292,20 @@ if run_button:
         st.stop()
 
     effective_key = api_key_override.strip() or config.OPENROUTER_API_KEY
-    if not effective_key:
-        st.error(
-            "Missing OpenRouter API Key. Configure OPENROUTER_API_KEY in .env or the sidebar."
-        )
-        st.stop()
+    is_demo = not bool(effective_key)
 
-    active_llm = make_llm(model=model_name.strip(), api_key=effective_key)
+    if is_demo:
+        demo_key = preset_choice if preset_choice in DEMO_DATA else "Tokyo Weather and Temperature Doubled"
+        st.info(
+            f"Showcase Mode Active: Replaying benchmark execution trace for '{demo_key}'. "
+            "To execute live queries, configure OPENROUTER_API_KEY in Streamlit Cloud Secrets or supply a key in the sidebar."
+        )
+        react_gen = lambda: simulate_stream_react(demo_key)
+        pe_gen = lambda: simulate_stream_plan_execute(demo_key)
+    else:
+        active_llm = make_llm(model=model_name.strip(), api_key=effective_key)
+        react_gen = lambda: stream_react(query, llm=active_llm, max_iterations=max_iterations)
+        pe_gen = lambda: stream_plan_execute(query, llm=active_llm, allow_replan=(max_replans > 0))
 
     if selected_agent == "ReAct":
         st.markdown("#### ReAct Agent")
@@ -296,21 +314,24 @@ if run_button:
         final_res = None
         last_step_count = 0
 
-        for event in stream_react(query, llm=active_llm, max_iterations=max_iterations):
+        for event in react_gen():
             if event["type"] == "update":
                 trace = event.get("trace", [])
                 if len(trace) > last_step_count:
                     last_step_count = len(trace)
                     latest = trace[-1]
+                    tool_name = latest.get("tool_name") or latest.get("tool", "unknown")
                     status_box.update(
-                        label=f"Step {last_step_count}: Running tool {latest.get('tool_name')}...",
+                        label=f"Step {last_step_count}: Running tool {tool_name}...",
                         state="running",
                     )
                 with live_trace_placeholder.container():
                     for idx, s in enumerate(trace, 1):
-                        st.markdown(f"**Step {idx}:** `{s.get('tool_name')}`")
-                        if s.get("thought"):
-                            st.caption(f"Reasoning: {s.get('thought')}")
+                        tool_name = s.get("tool_name") or s.get("tool", "unknown")
+                        st.markdown(f"**Step {idx}:** `{tool_name}`")
+                        thought_txt = s.get("thought") or s.get("description")
+                        if thought_txt:
+                            st.caption(f"Reasoning: {thought_txt}")
                         if s.get("observation") is not None:
                             st.caption(f"Observation: {str(s.get('observation'))[:140]}...")
 
@@ -341,7 +362,7 @@ if run_button:
         plan_placeholder = status_box.empty()
         final_res = None
 
-        for event in stream_plan_execute(query, llm=active_llm, allow_replan=(max_replans > 0)):
+        for event in pe_gen():
             if event["type"] == "phase":
                 phase = event["phase"]
                 if phase == "plan":
@@ -393,18 +414,21 @@ if run_button:
             react_res = None
             last_rc = 0
 
-            for event in stream_react(query, llm=active_llm, max_iterations=max_iterations):
+            for event in react_gen():
                 if event["type"] == "update":
                     trace = event.get("trace", [])
                     if len(trace) > last_rc:
                         last_rc = len(trace)
+                        latest = trace[-1]
+                        tool_name = latest.get("tool_name") or latest.get("tool", "unknown")
                         react_status.update(
-                            label=f"Step {last_rc}: {trace[-1].get('tool_name')}",
+                            label=f"Step {last_rc}: {tool_name}",
                             state="running",
                         )
                     with react_placeholder.container():
                         for s in trace:
-                            st.caption(f"• {s.get('tool_name')}: {str(s.get('observation'))[:80]}...")
+                            tool_name = s.get("tool_name") or s.get("tool", "unknown")
+                            st.caption(f"• {tool_name}: {str(s.get('observation'))[:80]}...")
                 elif event["type"] == "final":
                     react_res = event["result"]
                     react_status.update(label="ReAct completed", state="complete")
@@ -425,7 +449,7 @@ if run_button:
             pe_placeholder = pe_status.empty()
             pe_res = None
 
-            for event in stream_plan_execute(query, llm=active_llm, allow_replan=(max_replans > 0)):
+            for event in pe_gen():
                 if event["type"] == "phase":
                     phase = event["phase"]
                     if phase == "plan":

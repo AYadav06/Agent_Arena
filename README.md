@@ -209,6 +209,28 @@ Open **`http://localhost:8501`** in your browser to:
 
 ---
 
+## Streamlit Cloud Deployment & Recruiter Access
+
+When deploying to [Streamlit Community Cloud](https://share.streamlit.io), recruiters and reviewers can access the application without entering any API keys:
+
+1. **Deploying with Server Secrets (Live Execution):**
+   In your Streamlit Cloud app dashboard, navigate to **App Settings** -> **Secrets** and paste:
+   ```toml
+   OPENROUTER_API_KEY = "sk-or-v1-..."
+   TAVILY_API_KEY = "tvly-..."
+   MODEL = "google/gemini-2.0-flash-001"
+   ```
+   - Streamlit Cloud securely encrypts your keys server-side.
+   - Any visitor or recruiter accessing your public URL will immediately be able to run live multi-step queries without being prompted for keys.
+   - Credentials remain completely hidden from the browser frontend and are never exposed in Git.
+
+2. **Built-in Zero-Config Showcase Mode:**
+   - If no API key is provided, the platform automatically switches to **Showcase Mode**.
+   - Recruiters can evaluate all pre-configured benchmark tasks (Tokyo meteorological queries, Fibonacci calculations, 2024 Nobel discoveries) across **ReAct**, **Plan-and-Execute**, and **Head-to-Head Comparison**.
+   - Preserves complete live node status animations, tool execution outputs, and token/latency scorecard telemetry without consuming API credits or risking deployment crashes.
+
+---
+
 ## Sample Telemetry & Trace Output
 
 Every agent invocation returns a fully observable structured payload:
