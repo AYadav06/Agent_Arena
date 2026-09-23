@@ -209,11 +209,11 @@ Open **`http://localhost:8501`** in your browser to:
 
 ---
 
-## Streamlit Cloud Deployment & Recruiter Access
+## Streamlit Cloud Deployment & Credentials
 
-When deploying to [Streamlit Community Cloud](https://share.streamlit.io), recruiters and reviewers can access the application without entering any API keys:
+When deploying to [Streamlit Community Cloud](https://share.streamlit.io), execution runs live via the configured OpenRouter credentials:
 
-1. **Deploying with Server Secrets (Live Execution):**
+1. **Server Secrets (Recommended for Public Showcase):**
    In your Streamlit Cloud app dashboard, navigate to **App Settings** -> **Secrets** and paste:
    ```toml
    OPENROUTER_API_KEY = "sk-or-v1-..."
@@ -221,13 +221,11 @@ When deploying to [Streamlit Community Cloud](https://share.streamlit.io), recru
    MODEL = "google/gemini-2.0-flash-001"
    ```
    - Streamlit Cloud securely encrypts your keys server-side.
-   - Any visitor or recruiter accessing your public URL will immediately be able to run live multi-step queries without being prompted for keys.
+   - Any visitor accessing your public URL will immediately be able to run live multi-step queries without being prompted for keys.
    - Credentials remain completely hidden from the browser frontend and are never exposed in Git.
 
-2. **Built-in Zero-Config Showcase Mode:**
-   - If no API key is provided, the platform automatically switches to **Showcase Mode**.
-   - Recruiters can evaluate all pre-configured benchmark tasks (Tokyo meteorological queries, Fibonacci calculations, 2024 Nobel discoveries) across **ReAct**, **Plan-and-Execute**, and **Head-to-Head Comparison**.
-   - Preserves complete live node status animations, tool execution outputs, and token/latency scorecard telemetry without consuming API credits or risking deployment crashes.
+2. **Custom Sidebar Override:**
+   - Visitors can also provide their own OpenRouter API key directly in the sidebar to execute queries using their personal account and choice of models.
 
 ---
 

@@ -10,11 +10,6 @@ from agents import (
     stream_plan_execute,
     stream_react,
 )
-from demo_data import (
-    DEMO_DATA,
-    simulate_stream_plan_execute,
-    simulate_stream_react,
-)
 from llm import make_llm
 from tools import TOOL_REGISTRY
 
@@ -148,19 +143,19 @@ st.markdown(
 with st.sidebar:
     st.markdown("#### Engine Configuration")
     if config.OPENROUTER_API_KEY:
-        api_key_status = "Active (Connected)"
-        key_caption = "Server credentials loaded. Live execution active without requiring visitor input."
+        api_key_status = "Connected (.env / Secrets)"
+        key_caption = "Server credentials loaded. Live execution active."
     else:
-        api_key_status = "Showcase Mode (Zero-Config)"
-        key_caption = "No server key detected. Preset benchmarks run in instant showcase mode."
+        api_key_status = "Not detected"
+        key_caption = "Enter your OpenRouter API key below or set OPENROUTER_API_KEY in Streamlit Secrets."
     st.caption(f"OpenRouter Credentials: **{api_key_status}**")
 
     api_key_override = st.text_input(
-        "Custom Key Override (Optional)",
+        "OpenRouter API Key",
         type="password",
         value="",
         placeholder="sk-or-v1-...",
-        help="Optional. Leave blank to automatically use server credentials.",
+        help="Provide your OpenRouter key here or configure it in secrets.",
     )
     st.caption(key_caption)
 
@@ -292,20 +287,16 @@ if run_button:
         st.stop()
 
     effective_key = api_key_override.strip() or config.OPENROUTER_API_KEY
-    is_demo = not bool(effective_key)
-
-    if is_demo:
-        demo_key = preset_choice if preset_choice in DEMO_DATA else "Tokyo Weather and Temperature Doubled"
-        st.info(
-            f"Showcase Mode Active: Replaying benchmark execution trace for '{demo_key}'. "
-            "To execute live queries, configure OPENROUTER_API_KEY in Streamlit Cloud Secrets or supply a key in the sidebar."
+    if not effective_key:
+        st.error(
+            "Missing OpenRouter API Key. Please provide an OpenRouter API key in the sidebar "
+            "or configure OPENROUTER_API_KEY in Streamlit Secrets / .env."
         )
-        react_gen = lambda: simulate_stream_react(demo_key)
-        pe_gen = lambda: simulate_stream_plan_execute(demo_key)
-    else:
-        active_llm = make_llm(model=model_name.strip(), api_key=effective_key)
-        react_gen = lambda: stream_react(query, llm=active_llm, max_iterations=max_iterations)
-        pe_gen = lambda: stream_plan_execute(query, llm=active_llm, allow_replan=(max_replans > 0))
+        st.stop()
+
+    active_llm = make_llm(model=model_name.strip(), api_key=effective_key)
+    react_gen = lambda: stream_react(query, llm=active_llm, max_iterations=max_iterations)
+    pe_gen = lambda: stream_plan_execute(query, llm=active_llm, allow_replan=(max_replans > 0))
 
     if selected_agent == "ReAct":
         st.markdown("#### ReAct Agent")
