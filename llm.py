@@ -9,6 +9,13 @@ def make_llm(
     temperature: float = 0.0,
     **kwargs,
 ) -> ChatOpenAI:
+    default_headers = {
+        "HTTP-Referer": "https://github.com/AYadav06/Agent_Arena",
+        "X-Title": "Agent Arena",
+    }
+    custom_headers = kwargs.pop("default_headers", {})
+    headers = {**default_headers, **custom_headers}
+
     return ChatOpenAI(
         model=model or MODEL,
         base_url="https://openrouter.ai/api/v1",
@@ -17,5 +24,7 @@ def make_llm(
         max_tokens=4096,
         timeout=90,
         max_retries=3,
+        default_headers=headers,
         **kwargs,
     )
+

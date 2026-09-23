@@ -186,7 +186,7 @@ OPENROUTER_API_KEY=your_openrouter_api_key_here
 TAVILY_API_KEY=your_tavily_api_key_here
 
 # Default model identifier
-MODEL=inclusionai/ling-3.0-flash-vl:free
+MODEL=google/gemini-2.5-flash
 ```
 
 ### 4. Launch the Evaluation Studio
@@ -218,7 +218,7 @@ When deploying to [Streamlit Community Cloud](https://share.streamlit.io), execu
    ```toml
    OPENROUTER_API_KEY = "sk-or-v1-..."
    TAVILY_API_KEY = "tvly-..."
-   MODEL = "google/gemini-2.0-flash-001"
+   MODEL = "google/gemini-2.5-flash"
    ```
    - Streamlit Cloud securely encrypts your keys server-side.
    - Any visitor accessing your public URL will immediately be able to run live multi-step queries without being prompted for keys.

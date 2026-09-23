@@ -47,7 +47,14 @@ def run_step(step: PlanStep, results: dict[int, str]) -> dict[str, Any]:
             "error": f"no tool {step.tool!r}",
         }
     try:
-        args = json.loads(step.args_json)
+        try:
+            args = json.loads(step.args_json)
+        except Exception:
+            import ast
+            args = ast.literal_eval(step.args_json)
+
+        if not isinstance(args, dict):
+            args = {}
         args = {
             k: _resolve(v, results, step.tool == "calculator") for k, v in args.items()
         }

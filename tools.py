@@ -4,7 +4,7 @@ import os
 import subprocess
 import sys
 import tempfile
-from typing import Any, Callable, Dict, List
+from typing import Any, Callable, Dict, List, Optional
 import requests
 from langchain_core.tools import StructuredTool
 
@@ -88,13 +88,60 @@ def search(query: str) -> dict[str, Any]:
         return {"success": False, "error_type": "SEARCH_ERROR", "error": str(e)}
 
 
-def calculator(operation: str, a: float, b: float) -> dict[str, Any]:
+def calculator(
+    operation: Optional[str] = None,
+    a: Optional[Any] = None,
+    b: Optional[Any] = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
     """Perform basic arithmetic operations: add, subtract, multiply, divide."""
+    # Resolve aliases for operands
+    if a is None:
+        a = kwargs.get("number1", kwargs.get("num1", kwargs.get("x")))
+    if b is None:
+        b = kwargs.get("number2", kwargs.get("num2", kwargs.get("y")))
+
+    # Resolve expression string like "15 + 25" if provided
+    expr = kwargs.get("expression")
+    if expr and (a is None or b is None or operation is None):
+        import re
+        expr_str = str(expr).strip()
+        m = re.match(r"^([\d\.]+)\s*([\+\-\*\/])\s*([\d\.]+)$", expr_str)
+        if m:
+            a, sym, b = float(m.group(1)), m.group(2), float(m.group(3))
+            sym_map = {"+": "add", "-": "subtract", "*": "multiply", "/": "divide"}
+            operation = sym_map.get(sym, operation)
+
+    if operation:
+        operation = str(operation).lower().strip()
+        op_map = {
+            "+": "add",
+            "plus": "add",
+            "sum": "add",
+            "-": "subtract",
+            "minus": "subtract",
+            "*": "multiply",
+            "times": "multiply",
+            "x": "multiply",
+            "/": "divide",
+        }
+        operation = op_map.get(operation, operation)
+
+    try:
+        a_num = float(a) if a is not None else 0.0
+        b_num = float(b) if b is not None else 0.0
+    except (ValueError, TypeError):
+        return {
+            "success": False,
+            "error_type": "INVALID_OPERANDS",
+            "error": f"Operands 'a' ({a!r}) and 'b' ({b!r}) must be numbers.",
+        }
+
     ops = {
-        "add": lambda: a + b,
-        "subtract": lambda: a - b,
-        "multiply": lambda: a * b,
-        "divide": lambda: a / b,
+        "add": lambda: a_num + b_num,
+        "subtract": lambda: a_num - b_num,
+        "multiply": lambda: a_num * b_num,
+        "divide": lambda: a_num / b_num,
     }
     if operation not in ops:
         return {
@@ -102,7 +149,7 @@ def calculator(operation: str, a: float, b: float) -> dict[str, Any]:
             "error_type": "INVALID_OPERATION",
             "error": f"operation must be one of {list(ops)}",
         }
-    if operation == "divide" and b == 0:
+    if operation == "divide" and b_num == 0:
         return {
             "success": False,
             "error_type": "DIVISION_BY_ZERO",
@@ -158,9 +205,11 @@ def _tool_doc(fn: Any) -> str:
     return lines[0].strip() if lines else "No description available."
 
 
-TOOL_DOCS: str = "\n".join(
-    f"- {n}: {_tool_doc(f)}"
-    for n, f in TOOL_REGISTRY.items()
+TOOL_DOCS: str = (
+    "- calculator(operation, a, b): Perform arithmetic. operation is 'add', 'subtract', 'multiply', or 'divide'; a and b are numbers.\n"
+    "- code_exec(code): Run Python code in an isolated sandbox. code is a python script string.\n"
+    "- search(query): Search the live web. query is a search string.\n"
+    "- get_weather(city, unit='celsius'): Fetch current meteorological data for a city."
 )
 
 

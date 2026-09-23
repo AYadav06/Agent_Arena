@@ -19,7 +19,7 @@ def _get_config(key: str, default: str = "") -> str:
     return default
 
 
-MODEL = _get_config("MODEL", "inclusionai/ling-3.0-flash-vl:free")
+MODEL = _get_config("MODEL", "google/gemini-2.5-flash")
 OPENROUTER_API_KEY = _get_config("OPENROUTER_API_KEY", "")
 TAVILY_API_KEY = _get_config("TAVILY_API_KEY", "")
 MAX_ITERATIONS = int(_get_config("MAX_ITERATIONS", "8"))
