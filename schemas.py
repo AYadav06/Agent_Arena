@@ -1,4 +1,4 @@
-"""Pydantic schemas and dataclasses for Aegis agents."""
+"""Pydantic schemas and dataclasses for agents."""
 
 import time
 from dataclasses import dataclass

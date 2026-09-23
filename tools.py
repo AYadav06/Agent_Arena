@@ -1,10 +1,11 @@
-"""Tool definitions and registry for Aegis agents."""
+"""Tool definitions and registry for Agent Arena."""
 
 import os
 import subprocess
 import sys
 import tempfile
 from typing import Any, Callable, Dict, List, Optional
+import re
 import requests
 from langchain_core.tools import StructuredTool
 
@@ -68,12 +69,33 @@ def code_exec(code: str, timeout: int = 10) -> Dict[str, Any]:
 
 def search(query: str) -> dict[str, Any]:
     """Search the web for queries using the Tavily search API."""
-    try:
-        from tavily import TavilyClient
+    if not TAVILY_API_KEY:
+        return {
+            "success": False,
+            "error_type": "MISSING_API_KEY",
+            "error": "TAVILY_API_KEY is not configured. Please set TAVILY_API_KEY in Streamlit Secrets or .env.",
+        }
 
-        resp = TavilyClient(api_key=TAVILY_API_KEY).search(
-            query=query, search_depth="basic", max_results=5
-        )
+    try:
+        try:
+            from tavily import TavilyClient
+            client = TavilyClient(api_key=TAVILY_API_KEY)
+            resp = client.search(query=query, search_depth="basic", max_results=5)
+        except (ImportError, ModuleNotFoundError):
+            # Fallback to direct REST API call via requests if tavily package is not installed
+            r = requests.post(
+                "https://api.tavily.com/search",
+                json={
+                    "api_key": TAVILY_API_KEY,
+                    "query": query,
+                    "search_depth": "basic",
+                    "max_results": 5,
+                },
+                timeout=15,
+            )
+            r.raise_for_status()
+            resp = r.json()
+
         results = [
             {
                 "title": i.get("title"),
@@ -158,38 +180,99 @@ def calculator(
     return {"success": True, "expression": operation, "result": ops[operation]()}
 
 
-def get_weather(city: str, unit: str = "celsius") -> dict[str, Any]:
+def get_weather(
+    city: Optional[str] = None,
+    unit: str = "celsius",
+    **kwargs: Any,
+) -> dict[str, Any]:
     """Get the current weather forecast for a specified city."""
-    if unit not in ("celsius", "fahrenheit"):
-        return {"success": False, "error": "unit must be 'celsius' or 'fahrenheit'"}
+    # Resolve aliases (location, place, query)
+    target = city or kwargs.get("location") or kwargs.get("place") or kwargs.get("query") or ""
+    target = str(target).strip().strip("\"'")
+
+    # Clean noisy words commonly passed by LLMs (e.g. "Tokyo right now", "in Paris")
+    target = re.sub(r"(?i)\b(in|the|at)\s+", "", target)
+    target = re.sub(r"(?i)\s+(right now|today|weather|currently|current|forecast)\b", "", target).strip()
+
+    if not target:
+        return {"success": False, "error_type": "INVALID_INPUT", "error": "City name must be provided."}
+
+    # Normalize unit
+    u = str(unit).lower().strip()
+    norm_unit = "fahrenheit" if u in ("f", "fahrenheit", "imperial", "i") else "celsius"
+
+    headers = {
+        "User-Agent": "AgentArena/1.0 (https://github.com/AYadav06/Agent_Arena; info@agentarena.app)"
+    }
+
+    # 1. Primary: Open-Meteo API
     try:
-        geo = requests.get(
+        geo_resp = requests.get(
             "https://geocoding-api.open-meteo.com/v1/search",
-            params={"name": city, "count": 1},
-            timeout=15,
-        ).json()
-        if not geo.get("results"):
-            return {"success": False, "error": f"city '{city}' not found"}
-        loc = geo["results"][0]
-        w = requests.get(
-            "https://api.open-meteo.com/v1/forecast",
-            timeout=15,
-            params={
-                "latitude": loc["latitude"],
-                "longitude": loc["longitude"],
-                "current_weather": True,
-                "temperature_unit": unit,
-            },
-        ).json()["current_weather"]
-        return {
-            "success": True,
-            "city": loc["name"],
-            "temperature": w["temperature"],
-            "unit": unit,
-            "windspeed": w["windspeed"],
-        }
+            params={"name": target, "count": 1},
+            headers=headers,
+            timeout=10,
+        )
+        if geo_resp.status_code == 200:
+            geo_data = geo_resp.json()
+            if geo_data.get("results"):
+                loc = geo_data["results"][0]
+                fc_resp = requests.get(
+                    "https://api.open-meteo.com/v1/forecast",
+                    params={
+                        "latitude": loc["latitude"],
+                        "longitude": loc["longitude"],
+                        "current_weather": True,
+                        "temperature_unit": norm_unit,
+                    },
+                    headers=headers,
+                    timeout=10,
+                )
+                if fc_resp.status_code == 200:
+                    fc_data = fc_resp.json()
+                    w = fc_data.get("current_weather", {})
+                    if "temperature" in w:
+                        return {
+                            "success": True,
+                            "city": loc.get("name", target),
+                            "temperature": float(w["temperature"]),
+                            "unit": norm_unit,
+                            "windspeed": float(w.get("windspeed", 0.0)),
+                        }
+    except Exception:
+        pass
+
+    # 2. Resilient Fallback: wttr.in
+    try:
+        r = requests.get(
+            f"https://wttr.in/{requests.utils.quote(target)}?format=j1",
+            headers={"User-Agent": "curl/7.68.0"},
+            timeout=10,
+        )
+        if r.status_code == 200:
+            data = r.json()
+            cur = data["current_condition"][0]
+            temp = float(cur["temp_F"] if norm_unit == "fahrenheit" else cur["temp_C"])
+            wind = float(cur.get("windspeedKmph", 0.0))
+            return {
+                "success": True,
+                "city": target,
+                "temperature": temp,
+                "unit": norm_unit,
+                "windspeed": wind,
+            }
     except Exception as e:
-        return {"success": False, "error_type": "WEATHER_ERROR", "error": str(e)}
+        return {
+            "success": False,
+            "error_type": "WEATHER_ERROR",
+            "error": f"Could not retrieve weather for {target!r}: {e}",
+        }
+
+    return {
+        "success": False,
+        "error_type": "WEATHER_ERROR",
+        "error": f"City {target!r} not found.",
+    }
 
 
 TOOL_REGISTRY: dict[str, Callable] = {

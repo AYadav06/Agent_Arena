@@ -6,3 +6,4 @@ python-dotenv>=1.2.3
 streamlit>=1.64.0
 requests>=2.31.0
 pydantic>=2.0.0
+tavily-python>=0.5.0
